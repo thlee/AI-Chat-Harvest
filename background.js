@@ -203,28 +203,61 @@ function generateHtml(data) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${data.title || 'Gemini Archive'}</title>
     <style>
-        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; line-height: 1.6; }
-        .container { max-width: 800px; margin: 0 auto; }
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid #334155; padding-bottom: 1rem; }
-        h1 { font-size: 1.5rem; margin: 0; color: #f8fafc; }
-        .meta { font-size: 0.9rem; color: #94a3b8; }
-        .btn-download { background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; text-decoration: none; display: inline-block; }
-        .btn-download:hover { background: #2563eb; }
+        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #1a1a1a; margin: 0 auto; padding: 20px; max-width: 800px; background: #fff; }
+        header { border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 30px; }
+        h1 { font-size: 1.5em; margin: 0 0 5px 0; color: #0f172a; }
+        .meta { color: #64748b; font-size: 0.9em; }
+        .btn-download { display: none; }
         
-        /* Conversation Styles */
-        .turn { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 2rem; }
-        .role-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin-left: 4px; }
-        .message-content { padding: 1rem; border-radius: 0.75rem; font-size: 1rem; }
-        .user-message { align-self: flex-end; background-color: #334155; border-bottom-right-radius: 0.2rem; max-width: 85%; }
-        .model-message { align-self: flex-start; background-color: #1e293b; border-bottom-left-radius: 0.2rem; max-width: 100%; width: 100%; box-sizing: border-box; }
+        .turn { margin-bottom: 30px; }
+        .role-label { font-size: 0.85em; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; }
         
-        /* Markdown & Code */
-        .message-content img { max-width: 100%; border-radius: 0.5rem; }
-        .message-content pre { background-color: #020617; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; font-family: 'Consolas', monospace; border: 1px solid #1e293b; }
-        .message-content code { background-color: rgba(0,0,0,0.3); padding: 0.2rem 0.4rem; border-radius: 0.3rem; font-family: 'Consolas', monospace; font-size: 0.9em; }
-        .message-content pre code { background: none; padding: 0; }
+        .message-content { 
+            white-space: pre-wrap; 
+            font-size: 1rem; 
+            line-height: 1.7;
+        }
+
+        /* 
+           EXTREME MEASURE: Force enable interaction on everything inside the message content.
+           This overrides any specific style attributes or classes from the scraped content.
+        */
+        .message-content, 
+        .message-content * {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            pointer-events: auto !important;
+            cursor: auto !important;
+        }
         
-        a { color: #60a5fa; }
+        /* Make User questions distinct but minimal */
+        .user-message { 
+            background-color: #f1f5f9; /* Slate 100 - Light Grey */
+            padding: 15px 20px; 
+            border-radius: 12px;
+            color: #334155;
+            font-weight: 500;
+        } 
+        
+        .model-message { 
+            background-color: #eff6ff; /* Blue 50 - Very Light Blue */
+            padding: 15px 20px; 
+            border-radius: 12px;
+            color: #0f172a; 
+            margin-top: 5px;
+        }
+        
+        /* Code Block Styling */
+        pre { background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 0.9em; margin: 15px 0; }
+        code { font-family: 'Consolas', 'Monaco', monospace; }
+        .message-content code { background: #e2e8f0; color: #0f172a; padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
+        .message-content pre code { background: none; color: inherit; padding: 0; }
+        
+        img { max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; }
+        a { color: #2563eb; text-decoration: none; border-bottom: 1px solid transparent; }
+        a:hover { border-bottom-color: #2563eb; }
+        ul, ol { padding-left: 25px; margin: 10px 0; }
+        li { margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -358,6 +391,20 @@ function handleScrapeResponse(response, callback) {
             if (recents.length > 20) recents.pop(); // Increase history size since it's just metadata
             chrome.storage.local.set({ recents: recents });
         });
+
+        // Sanitize content: Remove restrictive styles (User Request)
+        if (data.turns && Array.isArray(data.turns)) {
+            data.turns.forEach(turn => {
+                if (turn.content) {
+                    // Remove pointer-events: none (allows clicking/interaction)
+                    turn.content = turn.content.replace(/pointer-events:\s*none;?/gi, '');
+                    // Remove user-select: none (allows text selection)
+                    turn.content = turn.content.replace(/user-select:\s*none;?/gi, '');
+                    // Clean up potentially empty style attributes
+                    turn.content = turn.content.replace(/style="\s*"/gi, '');
+                }
+            });
+        }
 
         // Generate HTML
         const htmlContent = generateHtml(data);

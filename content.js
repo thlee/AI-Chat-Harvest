@@ -35,9 +35,38 @@
         return 'unknown';
     }
 
+    // Auto-scroll utility for lazy-loaded content (Active Apps)
+    async function autoScroll() {
+        console.log("Archiver: Starting auto-scroll...");
+        await new Promise((resolve) => {
+            let lastScrollHeight = document.body.scrollHeight;
+            let noChangeCount = 0;
+            const scrollTimer = setInterval(() => {
+                window.scrollTo(0, document.body.scrollHeight);
+                const currentScrollHeight = document.body.scrollHeight;
+                if (currentScrollHeight === lastScrollHeight) {
+                    noChangeCount++;
+                    if (noChangeCount >= 10) { // ~2 seconds of stability
+                        clearInterval(scrollTimer);
+                        console.log("Archiver: Scrolling finished.");
+                        resolve();
+                    }
+                } else {
+                    lastScrollHeight = currentScrollHeight;
+                    noChangeCount = 0;
+                }
+            }, 200);
+            // hard timeout 15s
+            setTimeout(() => { clearInterval(scrollTimer); resolve(); }, 15000);
+        });
+    }
+
     // Scrape Claude conversation
     async function scrapeClaude() {
         console.log("Claude Archiver: Scraping conversation (v4.5 - CSS Class Targeting)...");
+
+        // Ensure all messages are loaded
+        await autoScroll();
 
         // Strategy: Precise DOM extraction using confirmed CSS classes
         // .font-user-message and .font-claude-response are the definitive selectors found in the HTML source.
@@ -51,11 +80,24 @@
         }
 
         let turns = [];
-        let title = 'Claude Conversation';
+        // Scope to the main chat area to avoid sidebars
+        const chatRoot = document.querySelector('div[role="main"]') || document.body;
 
-        // Use data-testid for user messages as class names might be flaky
-        const userNodes = Array.from(document.querySelectorAll('[data-testid="user-message"]'));
-        const modelNodes = Array.from(document.querySelectorAll('.font-claude-response'));
+        // Claude Selectors
+        const userSelector = '.font-user-message';
+        // Claude model messages key selector
+        const modelSelector = '.font-claude-response';
+
+        // Gather all relevant nodes
+        let userNodes = [];
+        chatRoot.querySelectorAll(userSelector).forEach(el => userNodes.push(el));
+
+        let modelNodes = [];
+        chatRoot.querySelectorAll(modelSelector).forEach(el => modelNodes.push(el));
+
+        // Deduplicate
+        userNodes = [...new Set(userNodes)];
+        modelNodes = [...new Set(modelNodes)];
 
         console.log(`Claude: Found ${userNodes.length} user messages and ${modelNodes.length} model messages`);
 
@@ -70,14 +112,40 @@
             return (a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
         });
 
+        // Turns collection
+
+
         allNodes.forEach(({ role, node }) => {
-            // Clone node to safely modify it (remove artifacts)
+            // CRITICAL FIX: Skip "Thinking Process" blocks completely
+            // These are identified by being inside a container with tabindex="-1"
+            // Skipping this prevents double messages and capturing internal logs
+            if (node.closest('[tabindex="-1"]')) {
+                return;
+            }
+
+            // Clone node to safely modify it
             const clone = node.cloneNode(true);
 
-            // Cleanup: Remove copy buttons, labels, and artifacts
-            // .contents-copy, button, and potentially utility classes that clutter
-            const artifacts = clone.querySelectorAll('button, .contents-copy, .text-xs.select-none');
+            // 1. Remove UI Artifacts (Copy buttons, etc)
+            const artifacts = clone.querySelectorAll('button, .contents-copy, .text-xs.select-none, .sticky.top-0, .sticky.top-2, .sticky.top-9');
             artifacts.forEach(el => el.remove());
+
+            // 2. Unlock Text Selection (Remove pointer-events-none)
+            if (clone.classList.contains('pointer-events-none')) clone.classList.remove('pointer-events-none');
+            clone.querySelectorAll('.pointer-events-none').forEach(el => el.classList.remove('pointer-events-none'));
+
+            // 3. Final Sanitization: Remove ALL inline styles and layout-affecting classes
+            // This ensures no hidden masks or overlays block text selection
+            clone.querySelectorAll('*').forEach(el => {
+                el.removeAttribute('style'); // Kill inline styles like 'mask-image'
+
+                // Remove specific Tailwind classes that might hide content or block interaction
+                el.classList.forEach(cls => {
+                    if (cls.includes('mask') || cls.includes('overflow') || cls.startsWith('h-') || cls.startsWith('max-h')) {
+                        el.classList.remove(cls);
+                    }
+                });
+            });
 
             let content = clone.innerHTML.trim();
 
@@ -85,6 +153,8 @@
                 turns.push({ role, content });
             }
         });
+
+        let title = 'Claude Conversation';
 
         // Extract Title from H1 if present
         const h1 = document.querySelector('h1');
@@ -119,13 +189,20 @@
     async function scrapeChatGPT() {
         console.log("AI Archiver: Scraping ChatGPT conversation...");
 
+        // Ensure all messages are loaded
+        await autoScroll();
+
         // Wait for messages to load
         await waitForElement('[data-message-author-role]', 5000).catch(() => {
             console.warn("No messages found");
         });
 
         const turns = [];
-        const messages = document.querySelectorAll('[data-message-author-role]');
+
+        // Scope to Main Area to avoid sidebar
+        const chatMain = document.querySelector('main, [role="main"]') || document.body;
+
+        const messages = chatMain.querySelectorAll('[data-message-author-role]');
 
         messages.forEach((msg) => {
             const role = msg.getAttribute('data-message-author-role'); // "user" or "assistant"
@@ -191,147 +268,130 @@
     // Scrape Gemini conversation
     async function scrapeGemini() {
         console.log("Gemini Archiver: Starting scrape...");
-        try {
-            // Wait strictly for the viewer
-            const viewer = await waitForElement('share-turn-viewer', 5000).catch(e => {
-                console.warn("View container not found immediately, checking legacy selectors...");
-                return document.querySelector('.content-container');
-            });
 
-            if (!viewer) throw new Error("Could not find conversation container.");
+        // 1. Try to find the main scroll container to ensure we are on a valid page
+        // Shared pages use 'share-turn-viewer', App uses 'infinite-scroller' or 'main'
+        const container = await waitForElement('share-turn-viewer, .content-container, main, infinite-scroller', 5000)
+            .catch(() => console.warn("Gemini: Main container not found standardly, proceeding anyway..."));
 
-            console.log("Gemini Archiver: Container found. Starting auto-scroll...");
+        // 2. Auto-scroll to load all lazy-loaded content
+        await autoScroll();
 
-            // Robust Auto-scroll 
-            await new Promise((resolve) => {
-                let lastScrollHeight = document.body.scrollHeight;
-                let noChangeCount = 0;
-
-                // Interval increased to 200ms to allow rendering time
-                const scrollTimer = setInterval(() => {
-                    window.scrollTo(0, document.body.scrollHeight);
-
-                    const currentScrollHeight = document.body.scrollHeight;
-
-                    if (currentScrollHeight === lastScrollHeight) {
-                        noChangeCount++;
-                        // Wait for 20 checks * 200ms = 4 seconds of no change before finishing
-                        // This handles slow valid lazy loads better
-                        if (noChangeCount >= 5) {
-                            clearInterval(scrollTimer);
-                            console.log("Gemini Archiver: Reached bottom of page (Stable).");
-                            resolve();
-                        }
-                    } else {
-                        // Height increased, content loaded. Reset counter.
-                        lastScrollHeight = currentScrollHeight;
-                        noChangeCount = 0;
-                        console.log("Gemini Archiver: Scrolling / Loading more content...");
-                    }
-                }, 200);
-
-                // Safety timeout: 15 seconds max scrolling
-                setTimeout(() => {
-                    clearInterval(scrollTimer);
-                    console.log("Gemini Archiver: Scroll timeout reached. Proceeding...");
-                    resolve();
-                }, 15000);
-            });
-
-            // Final hydration wait
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // Title Extraction
-            let title = 'Gemini Conversation';
-            const titleEl = document.querySelector('.share-title-section') || document.querySelector('h1');
-            if (titleEl && titleEl.innerText.trim()) {
-                // Get only the first line, remove newlines and extra whitespace
-                const fullText = titleEl.innerText.trim();
-                const firstLine = fullText.split('\n')[0].trim();
-                title = firstLine || 'Gemini Conversation';
-            }
-
-            console.log("Gemini Archiver: Extracted title:", title);
-
-            const turns = [];
-            const turnElements = document.querySelectorAll('share-turn-viewer');
-
-            turnElements.forEach((turn, index) => {
-                // User Query extraction
-                // Selector strategy: user-query -> .query-text-line or .query-text
-                const userQueryElement = turn.querySelector('user-query');
-                let userText = '';
-                if (userQueryElement) {
-                    // Try to get structured text lines first
-                    const lines = userQueryElement.querySelectorAll('.query-text-line');
-                    if (lines.length > 0) {
-                        userText = Array.from(lines).map(line => line.innerText).join('\n');
-                    } else {
-                        // Fallback to raw text
-                        userText = userQueryElement.innerText.trim();
-                    }
-                }
-
-                // Model Response extraction
-                // Try multiple selectors including Tag Names
-                let modelText = '';
-                const modelSelectors = [
-                    'message-content', // Custom Element Tag
-                    '.message-content .markdown',
-                    'model-response',
-                    '.model-response-text',
-                    '.markdown'
-                ];
-
-                for (let selector of modelSelectors) {
-                    const el = turn.querySelector(selector);
-                    if (el && el.innerHTML.trim()) {
-                        modelText = el.innerHTML;
-                        break;
-                    }
-                }
-
-                if (userText || modelText) {
-                    turns.push({
-                        role: 'user',
-                        content: userText
-                    });
-                    turns.push({
-                        role: 'model',
-                        content: modelText
-                    });
-                }
-            });
-
-            console.log("Gemini Archiver: Scraping complete!");
-            console.log("  - Title:", title);
-            console.log("  - Turns found:", turns.length);
-            console.log("  - Turn elements found:", turnElements.length);
-
-            if (turns.length === 0) {
-                console.warn("WARNING: No turns were scraped! Debugging info:");
-                console.warn("  - First turn element:", turnElements[0]);
-                if (turnElements[0]) {
-                    console.warn("  - user-query in first turn:", turnElements[0].querySelector('user-query'));
-                    console.warn("  - message-content in first turn:", turnElements[0].querySelector('message-content'));
-                }
-            }
-
-            const result = {
-                platform: 'gemini',
-                title: title,
-                url: window.location.href,
-                scrapedAt: new Date().toISOString(),
-                turns: turns
-            };
-
-            console.log("Gemini Archiver: Sending result to background...", result);
-            return result;
-
-        } catch (error) {
-            console.error('Scraping error:', error);
-            throw error;
+        // 3. Extract Title
+        let title = 'Gemini Conversation';
+        const titleEl = document.querySelector('.share-title-section, h1[data-test-id="conversation-title"], .conversation-title');
+        if (titleEl && titleEl.innerText.trim()) {
+            title = titleEl.innerText.split('\n')[0].trim();
         }
+
+        // 4. Scrape Turns (Dual Strategy: Shared vs App)
+        let turns = [];
+
+        // Strategy A: Custom Elements (Shared Page) via share-turn-viewer
+        const shareTurns = document.querySelectorAll('share-turn-viewer');
+        if (shareTurns.length > 0) {
+            console.log("Gemini: Detected Shared Page structure.");
+            shareTurns.forEach(turn => {
+                const userText = turn.querySelector('user-query')?.innerText?.trim();
+                const modelText = turn.querySelector('message-content, model-response')?.innerHTML?.trim();
+                if (userText) turns.push({ role: 'user', content: userText });
+                if (modelText) turns.push({ role: 'model', content: modelText });
+            });
+        }
+
+        // Strategy B: DOM Position Sorting (App Page)
+        // Targeted for Active App sessions, focusing on .structured-content-container
+        if (turns.length === 0) {
+            console.log("Gemini: Detected App Page. Focusing on .structured-content-container...");
+
+            // Limit scope to the main chat container if possible
+            const chatRoot = document.querySelector('.structured-content-container') || document.body;
+
+            // Selectors for User messages
+            const userSelectors = [
+                'user-query',
+                '.user-query',
+                '.query-text',
+                '[data-testid="user-query"]'
+            ];
+
+            // Selectors for Model messages
+            // We focus on .markdown to get the actual text and avoid container UI (buttons, drafts, etc.)
+            const modelSelectors = [
+                '.markdown',
+                '.message-content'
+            ];
+
+            // Collect all potential nodes within the chat root
+            let userNodes = [];
+            userSelectors.forEach(sel => {
+                chatRoot.querySelectorAll(sel).forEach(el => {
+                    if (el.innerText && el.innerText.trim().length > 0) userNodes.push(el);
+                });
+            });
+
+            let modelNodes = [];
+            modelSelectors.forEach(sel => {
+                chatRoot.querySelectorAll(sel).forEach(el => {
+                    // Filter out input areas, hidden elements, or UI artifacts
+                    if (el.closest('textarea') || el.closest('[contenteditable]')) return;
+                    if (el.innerText && el.innerText.trim().length > 0) modelNodes.push(el);
+                });
+            });
+
+            // Deduplicate nodes
+            userNodes = [...new Set(userNodes)];
+            modelNodes = [...new Set(modelNodes)];
+
+            // Filter out PARENT nodes if their children are also selected
+            // (We want the most specific content, i.e., the child .markdown, not the wrapper)
+            modelNodes = modelNodes.filter(node => {
+                // If this node contains another node in the list, discard THIS node (it's a wrapper)
+                const isWrapper = modelNodes.some(other => other !== node && node.contains(other));
+                return !isWrapper;
+            });
+
+            console.log(`Gemini: Found ${userNodes.length} user nodes and ${modelNodes.length} model nodes (filtered).`);
+
+            // Combine and sort by DOM position
+            const allNodes = [
+                ...userNodes.map(node => ({ role: 'user', node })),
+                ...modelNodes.map(node => ({ role: 'model', node }))
+            ];
+
+            allNodes.sort((a, b) => {
+                return (a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+            });
+
+            // Extract content
+            allNodes.forEach(({ role, node }) => {
+                // For user, usually innerText is enough
+                // For model, we want innerHTML for formatting
+                const content = role === 'user' ? node.innerText.trim() : node.innerHTML.trim();
+
+                // Avoid duplicates: check if this content is effectively same as last turn of same role
+                const lastTurn = turns[turns.length - 1];
+                if (lastTurn && lastTurn.role === role && lastTurn.content === content) return;
+
+                turns.push({ role, content });
+            });
+        }
+
+        console.log("Gemini Archiver: Scraping complete!");
+        console.log("  - Title:", title);
+        console.log("  - Turns found:", turns.length);
+
+        if (turns.length === 0 && !title) {
+            console.warn("Gemini: Failed to scrape any content.");
+        }
+
+        return {
+            platform: 'gemini',
+            title: title || 'Gemini Conversation',
+            url: window.location.href,
+            scrapedAt: new Date().toISOString(),
+            turns: turns
+        };
     }
 
     // Main scraping function - detects platform and calls appropriate scraper
