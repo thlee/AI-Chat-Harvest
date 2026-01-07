@@ -3,6 +3,11 @@
   "name": "AI Chat Harvest",
   "version": "1.0",
   "description": "Archive and download AI chat conversations from Gemini, ChatGPT, and more.",
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
   "permissions": [
     "activeTab",
     "scripting",
@@ -38,9 +43,9 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icon.png",
-      "48": "icon.png",
-      "128": "icon.png"
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
     }
   }
 }
