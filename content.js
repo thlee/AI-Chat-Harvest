@@ -31,8 +31,89 @@
         const url = window.location.href;
         if (url.includes('gemini.google.com')) return 'gemini';
         if (url.includes('chatgpt.com')) return 'chatgpt';
+        if (url.includes('claude.ai')) return 'claude';
         return 'unknown';
     }
+
+    // Scrape Claude conversation
+    async function scrapeClaude() {
+        console.log("Claude Archiver: Scraping conversation (v4.5 - CSS Class Targeting)...");
+
+        // Strategy: Precise DOM extraction using confirmed CSS classes
+        // .font-user-message and .font-claude-response are the definitive selectors found in the HTML source.
+
+        // Wait for content (messages)
+        try {
+            // Updated selector to use data-testid which is more reliable
+            await waitForElement('[data-testid="user-message"], .font-claude-response', 5000);
+        } catch (e) {
+            console.warn("Claude: Timeout waiting for messages (CSS Class check)");
+        }
+
+        let turns = [];
+        let title = 'Claude Conversation';
+
+        // Use data-testid for user messages as class names might be flaky
+        const userNodes = Array.from(document.querySelectorAll('[data-testid="user-message"]'));
+        const modelNodes = Array.from(document.querySelectorAll('.font-claude-response'));
+
+        console.log(`Claude: Found ${userNodes.length} user messages and ${modelNodes.length} model messages`);
+
+        // Combine and sort nodes by their position in the DOM to reconstruct the conversation flow
+        const allNodes = [
+            ...userNodes.map(node => ({ role: 'user', node })),
+            ...modelNodes.map(node => ({ role: 'model', node }))
+        ];
+
+        // Sort by DOM order
+        allNodes.sort((a, b) => {
+            return (a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+        });
+
+        allNodes.forEach(({ role, node }) => {
+            // Clone node to safely modify it (remove artifacts)
+            const clone = node.cloneNode(true);
+
+            // Cleanup: Remove copy buttons, labels, and artifacts
+            // .contents-copy, button, and potentially utility classes that clutter
+            const artifacts = clone.querySelectorAll('button, .contents-copy, .text-xs.select-none');
+            artifacts.forEach(el => el.remove());
+
+            let content = clone.innerHTML.trim();
+
+            if (content) {
+                turns.push({ role, content });
+            }
+        });
+
+        // Extract Title from H1 if present
+        const h1 = document.querySelector('h1');
+        if (h1 && h1.innerText) title = h1.innerText.trim();
+
+        // Fallback title using first user message text
+        if ((!title || title === 'Claude Conversation') && turns.length > 0) {
+            const firstUser = turns.find(t => t.role === 'user');
+            if (firstUser) {
+                // Create a temp div to extracting text from HTML content
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = firstUser.content;
+                // Get clean text for title
+                const plainText = tempDiv.innerText.replace(/\s+/g, ' ').trim();
+                title = plainText.substring(0, 50).trim();
+            }
+        }
+
+        console.log(`Claude: Successfully scraped ${turns.length} turns`);
+
+        return {
+            platform: 'claude',
+            title: title,
+            url: window.location.href,
+            scrapedAt: new Date().toISOString(),
+            turns: turns
+        };
+    }
+
 
     // Scrape ChatGPT conversation
     async function scrapeChatGPT() {
@@ -42,8 +123,6 @@
         await waitForElement('[data-message-author-role]', 5000).catch(() => {
             console.warn("No messages found");
         });
-
-
 
         const turns = [];
         const messages = document.querySelectorAll('[data-message-author-role]');
@@ -264,6 +343,8 @@
             return await scrapeChatGPT();
         } else if (platform === 'gemini') {
             return await scrapeGemini();
+        } else if (platform === 'claude') {
+            return await scrapeClaude();
         } else {
             throw new Error("Unsupported platform: " + window.location.href);
         }

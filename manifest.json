@@ -12,7 +12,20 @@
   ],
   "host_permissions": [
     "https://gemini.google.com/*",
-    "https://chatgpt.com/*"
+    "https://chatgpt.com/*",
+    "https://claude.ai/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://gemini.google.com/*",
+        "https://chatgpt.com/*",
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "content.js"
+      ]
+    }
   ],
   "options_ui": {
     "page": "options.html",
