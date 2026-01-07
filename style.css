@@ -1,16 +1,20 @@
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #0f172a; /* Slate 900 */
-    color: #e2e8f0; /* Slate 200 */
+    background-color: #0f172a;
+    /* Slate 900 */
+    color: #e2e8f0;
+    /* Slate 200 */
     margin: 0;
     width: 600px;
-    height: 600px; /* Fixed height for popup */
+    height: 600px;
+    /* Fixed height for popup */
     display: flex;
     flex-direction: column;
 }
 
 header {
-    background-color: #1e293b; /* Slate 800 */
+    background-color: #1e293b;
+    /* Slate 800 */
     padding: 1rem;
     display: flex;
     align-items: center;
@@ -71,7 +75,8 @@ main {
     margin-bottom: 1.5rem;
 }
 
-input[type="text"] {
+input[type="text"],
+textarea {
     flex: 1;
     padding: 0.75rem;
     border-radius: 0.5rem;
@@ -79,9 +84,12 @@ input[type="text"] {
     background-color: #1e293b;
     color: #fff;
     outline: none;
+    resize: vertical;
+    font-family: inherit;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+textarea:focus {
     border-color: #60a5fa;
     box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
 }
@@ -161,7 +169,8 @@ input[type="text"]:focus {
 
 .model-message {
     align-self: flex-start;
-    background-color: #1e293b; /* Or keep dark */
+    background-color: #1e293b;
+    /* Or keep dark */
     border-bottom-left-radius: 0.1rem;
     max-width: 95%;
 }
@@ -186,6 +195,18 @@ input[type="text"]:focus {
     font-size: 0.9rem;
     display: none;
 }
-.status-success { background-color: rgba(34, 197, 94, 0.2); color: #4ade80; }
-.status-error { background-color: rgba(239, 68, 68, 0.2); color: #f87171; }
-.status-info { background-color: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+
+.status-success {
+    background-color: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+}
+
+.status-error {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.status-info {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}

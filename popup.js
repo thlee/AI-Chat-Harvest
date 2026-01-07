@@ -24,9 +24,21 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 recentItems.forEach(item => {
                     const div = document.createElement('div');
-                    div.style.cssText = 'padding: 0.5rem 0.75rem; background: #334155; border-radius: 0.5rem; font-size: 0.85rem; margin-bottom: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+                    // Use flexbox for layout: title on left, platform on right
+                    div.style.cssText = 'padding: 0.5rem 0.75rem; background: #334155; border-radius: 0.5rem; font-size: 0.85rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;';
                     div.title = item.title; // Show full title on hover
-                    div.innerText = item.title;
+
+                    const titleSpan = document.createElement('span');
+                    titleSpan.style.cssText = 'overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 0.5rem; flex: 1;';
+                    titleSpan.innerText = item.title;
+
+                    const platformSpan = document.createElement('span');
+                    platformSpan.style.cssText = 'font-size: 0.7rem; color: #94a3b8; background: #1e293b; padding: 2px 6px; border-radius: 4px; text-transform: capitalize;';
+                    // Default to empty if not present (legacy items)
+                    platformSpan.innerText = item.platform || 'Unknown';
+
+                    div.appendChild(titleSpan);
+                    div.appendChild(platformSpan);
                     list.appendChild(div);
                 });
             }
@@ -38,16 +50,43 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     btnArchive.addEventListener('click', async () => {
-        const url = urlInput.value.trim();
-        showStatus('Processing...', 'info');
+        const inputVal = urlInput.value.trim();
+        const urls = inputVal.split(/[\r\n]+/).map(u => u.trim()).filter(u => u.length > 0);
+
+        if (urls.length === 0 && inputVal.length === 0) {
+            // Case for archiving current tab (empty input)
+            // Send empty list to signify "current tab"
+            // Wait, previous logic was: if url empty -> current tab.
+            // If user enters nothing, we pass empty list? Or specific flag?
+            // Let's keep consistency: if input empty -> archive current tab
+            chrome.runtime.sendMessage({ action: "start_archive", url: "" }, (response) => {
+                if (chrome.runtime.lastError) {
+                    showStatus('Error: ' + chrome.runtime.lastError.message, 'error');
+                    btnArchive.disabled = false;
+                } else {
+                    showStatus('Archiving current tab...', 'success');
+                    setTimeout(() => window.close(), 1000);
+                }
+            });
+            return;
+        }
+
+        if (urls.length > 10) {
+            const confirmed = confirm(`You are about to archive ${urls.length} URLs. This might take a while. Continue?`);
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        showStatus(`Queueing ${urls.length} URLs...`, 'info');
         btnArchive.disabled = true;
 
-        chrome.runtime.sendMessage({ action: "start_archive", url: url }, (response) => {
+        chrome.runtime.sendMessage({ action: "batch_archive", urls: urls }, (response) => {
             if (chrome.runtime.lastError) {
                 showStatus('Error: ' + chrome.runtime.lastError.message, 'error');
                 btnArchive.disabled = false;
             } else {
-                showStatus('Done! HTML file downloaded.', 'success');
+                showStatus(`Started! Processing ${urls.length} archives in background.`, 'success');
                 setTimeout(() => window.close(), 2000);
             }
         });

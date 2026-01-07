@@ -1,68 +1,149 @@
 // background.js
 
+// Queue Management
+let archiveQueue = [];
+let isProcessing = false;
+
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log("Background: Received message:", request);
+
     if (request.action === "start_archive") {
-        console.log("Background: Starting archive for URL:", request.url);
-        handleArchiveRequest(request.url);
-        sendResponse({ status: "started" });
+        console.log("Background: Starting single archive for URL:", request.url);
+        // Treat as a batch of 1 or special case
+        // If url is empty, it means "current tab" -> handled immediately (not queued) to avoid complexity
+        if (!request.url) {
+            handleCurrentTabArchive();
+            sendResponse({ status: "started" });
+        } else {
+            addToQueue([request.url]);
+            sendResponse({ status: "queued" });
+        }
+    } else if (request.action === "batch_archive") {
+        console.log("Background: Processing batch of", request.urls.length, "URLs");
+        addToQueue(request.urls);
+        sendResponse({ status: "queued", count: request.urls.length });
     }
 
-
-
-    return true; // Keep channel open for async response
+    return true; // Keep channel open
 });
 
-async function handleArchiveRequest(url) {
+function addToQueue(urls) {
+    archiveQueue.push(...urls);
+    processQueue();
+}
+
+async function processQueue() {
+    if (isProcessing) return;
+    if (archiveQueue.length === 0) return;
+
+    isProcessing = true;
+    console.log("Background: Queue processing started. Remaining:", archiveQueue.length);
+
     try {
-        // Read settings
-        const settings = await chrome.storage.local.get({ showSourcePage: true });
-        const showSource = settings.showSourcePage;
+        while (archiveQueue.length > 0) {
+            const url = archiveQueue.shift();
+            console.log("Background: Processing URL:", url);
+            try {
+                await processSingleUrl(url);
+            } catch (err) {
+                console.error("Background: Error processing URL:", url, err);
+            }
 
-        let targetTabId;
+            // Small delay between items to be safe
+            await new Promise(r => setTimeout(r, 1000));
+        }
+    } finally {
+        isProcessing = false;
+        console.log("Background: Queue processing finished.");
+    }
+}
 
-        if (url) {
-            // Case 1: Open new tab (active based on setting)
-            console.log("Opening tab for URL, active:", showSource);
+// Logic for Current Tab (Legacy/Interactive)
+async function handleCurrentTabArchive() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) return;
+
+        if (tab.status === 'complete') {
+            injectAndExecute(tab.id);
+        } else {
+            chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
+                if (tabId === tab.id && info.status === 'complete') {
+                    chrome.tabs.onUpdated.removeListener(listener);
+                    injectAndExecute(tab.id);
+                }
+            });
+        }
+    } catch (err) {
+        console.error("Current tab archive error:", err);
+    }
+}
+
+// Logic for URL from Queue
+function processSingleUrl(url) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const settings = await chrome.storage.local.get({ showSourcePage: true });
+            const showSource = settings.showSourcePage;
+
+            // Create tab
             const tab = await chrome.tabs.create({ url: url, active: showSource });
-            targetTabId = tab.id;
+            const tabId = tab.id;
 
-            // Store tab ID for cleanup if background mode
             if (!showSource) {
-                await chrome.storage.local.set({ backgroundTabId: targetTabId });
+                await chrome.storage.local.set({ backgroundTabId: tabId });
             }
 
             // Wait for load
-            chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-                if (tabId === targetTabId && info.status === 'complete') {
-                    chrome.tabs.onUpdated.removeListener(listener);
-                    injectAndExecute(targetTabId);
+            const onTabUpdated = (tid, info) => {
+                if (tid === tabId && info.status === 'complete') {
+                    chrome.tabs.onUpdated.removeListener(onTabUpdated);
+
+                    // Inject
+                    chrome.scripting.executeScript({
+                        target: { tabId: tabId },
+                        files: ['content.js'],
+                        world: 'ISOLATED'
+                    }).then(() => {
+                        // Wait for script init
+                        setTimeout(() => {
+                            // Send Scrape Message
+                            chrome.tabs.sendMessage(tabId, { action: "scrape" }, (response) => {
+                                if (chrome.runtime.lastError || !response) {
+                                    console.error("Scrape failed:", chrome.runtime.lastError);
+                                    // Close tab if failed and background
+                                    if (!showSource) chrome.tabs.remove(tabId);
+                                    reject(new Error("Scrape handshake failed"));
+                                    return;
+                                }
+
+                                // Handle Response
+                                handleScrapeResponse(response, () => {
+                                    // On Success (Download started)
+                                    // For background tabs, we wait for download to finish to close tab
+                                    // But for queue progress, we can resolve now or wait a bit.
+                                    // handleScrapeResponse is synchronous-ish but triggers download async.
+
+                                    // We need to know when download is DONE to resolve this promise effectively?
+                                    // Actually, let's resolve now, but maybe keep tab open until download finishes?
+                                    // chrome.downloads.onChanged handles closing the background tab.
+                                    resolve();
+                                });
+                            });
+                        }, 500); // reduced delay
+                    }).catch(err => {
+                        console.error("Injection error:", err);
+                        reject(err);
+                    });
                 }
-            });
+            };
+            chrome.tabs.onUpdated.addListener(onTabUpdated);
 
-        } else {
-            // Case 2: Use current active tab
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab) return;
-            targetTabId = tab.id;
-
-            if (tab.status === 'complete') {
-                // Already loaded, proceed immediately
-                injectAndExecute(targetTabId);
-            } else {
-                // Still loading, wait
-                chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-                    if (tabId === targetTabId && info.status === 'complete') {
-                        chrome.tabs.onUpdated.removeListener(listener);
-                        injectAndExecute(targetTabId);
-                    }
-                });
-            }
+        } catch (e) {
+            reject(e);
         }
-    } catch (err) {
-        console.error("Archive error:", err);
-    }
+    });
 }
 
 function injectAndExecute(tabId) {
@@ -76,7 +157,7 @@ function injectAndExecute(tabId) {
     }).then(() => {
         console.log("Content script injected successfully");
         // Wait for script to initialize
-        setTimeout(() => sendMessageWithRetry(tabId, { action: "scrape" }, 0), 2000);
+        setTimeout(() => sendMessageWithRetry(tabId, { action: "scrape" }, 0), 500);
     }).catch(err => {
         console.error("Injection failed:", err);
     });
@@ -231,7 +312,7 @@ function generateHtml(data) {
 </html>`;
 }
 
-function handleScrapeResponse(response) {
+function handleScrapeResponse(response, callback) {
     if (response && response.success) {
         const data = response.data;
         console.log("Background: Processing scraped data, title:", data.title);
@@ -269,6 +350,7 @@ function handleScrapeResponse(response) {
             const recents = result.recents;
             recents.unshift({
                 title: data.title || "Untitled",
+                platform: data.platform,
                 filename: filename,
                 date: new Date().toLocaleString()
                 // No need to store fullData anymore for viewer
@@ -302,6 +384,10 @@ function handleScrapeResponse(response) {
                 saveAs: false
             }, (downloadId) => {
                 const error = chrome.runtime.lastError;
+                if (!error) {
+                    activeDownloads.add(downloadId);
+                }
+
                 if (error) {
                     console.error("Archive Download Failed:", error.message);
 
@@ -324,6 +410,8 @@ function handleScrapeResponse(response) {
                 } else {
                     console.log("Archive saved successfully. ID:", downloadId);
                 }
+
+                if (callback) callback();
             });
         });
     } else {
@@ -336,43 +424,56 @@ function handleScrapeResponse(response) {
 }
 
 // Listen for download completion
+// Track active downloads initiated by this extension
+const activeDownloads = new Set();
+
+// Listen for download completion
 chrome.downloads.onChanged.addListener(async (delta) => {
     // Only handle state changes to 'complete'
     if (delta.state && delta.state.current === 'complete') {
-        console.log("Download completed:", delta.id);
+        console.log("Download completed. ID:", delta.id);
 
-        // Check if we should auto-open and close background tab
         const settings = await chrome.storage.local.get({
             showSourcePage: true,
             backgroundTabId: null,
             autoOpenFile: true
         });
 
+        // 1. Auto Open Logic (Applies to ALL modes if enabled and initiated by us)
+        if (activeDownloads.has(delta.id)) {
+            activeDownloads.delete(delta.id); // Remove from tracking
+
+            if (settings.autoOpenFile) {
+                // Check filename to be safe
+                const downloads = await chrome.downloads.search({ id: delta.id });
+                if (downloads.length > 0) {
+                    const download = downloads[0];
+                    if (download.filename && download.filename.endsWith('.html')) {
+                        console.log("Auto-opening downloaded file:", download.filename);
+
+                        // Construct file URL
+                        // Note: Browsers usually require "Allow access to file URLs" for extensions to open file:// links
+                        const path = download.filename.replace(/\\/g, '/');
+                        const fileUrl = 'file:///' + path.split('/').map(encodeURIComponent).join('/');
+
+                        chrome.tabs.create({ url: fileUrl }).catch(err => {
+                            console.error("Failed to open file tab:", err);
+                            // Fallback to show if tab creation fails (e.g. permission issues)
+                            chrome.downloads.show(delta.id);
+                        });
+                    }
+                }
+            }
+        }
+
+        // 2. Background Tab Cleanup Logic (Only if background mode)
         if (!settings.showSourcePage && settings.backgroundTabId) {
-            // Get download info
-            const downloads = await chrome.downloads.search({ id: delta.id });
-            if (downloads.length > 0) {
-                const download = downloads[0];
-                console.log("Downloaded file:", download.filename);
-
-                // Open the downloaded HTML file location if enabled
-                if (settings.autoOpenFile && download.filename && download.filename.endsWith('.html')) {
-                    // Chrome doesn't allow direct file:/// URLs from extensions
-                    // We need to use chrome.downloads.show() or open Downloads page
-                    // Best approach: open downloads page
-                    await chrome.downloads.show(delta.id);
-                }
-
-                // Close the background tab
-                try {
-                    await chrome.tabs.remove(settings.backgroundTabId);
-                    console.log("Background tab closed");
-                } catch (e) {
-                    console.log("Background tab already closed or not found");
-                }
-
-                // Clear stored tab ID
+            try {
+                await chrome.tabs.remove(settings.backgroundTabId);
+                console.log("Background tab closed for download:", delta.id);
                 await chrome.storage.local.remove('backgroundTabId');
+            } catch (e) {
+                // Tab might be gone or already closed
             }
         }
     }

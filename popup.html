@@ -4,25 +4,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Archiver</title>
+    <title>AI Chat Archiver</title>
     <link rel="stylesheet" href="style.css">
 </head>
 </head>
 
 <body>
     <header>
-        <h1>Gemini Archiver</h1>
+        <h1>AI Chat Archiver</h1>
     </header>
 
     <main>
         <!-- Download Section -->
         <div id="section-download" class="view-section active" style="display: block;">
             <p style="margin-bottom: 1rem; color: #94a3b8;">
-                Enter a Gemini Share URL to archive, or leave empty to archive the current tab.
+                Enter AI Share URLs (Gemini, ChatGPT, Claude) to archive, or leave empty to archive the current tab.
             </p>
 
             <div class="input-group">
-                <input type="text" id="url-input" placeholder="https://gemini.google.com/share/...">
+                <textarea id="url-input" rows="5"
+                    placeholder="Enter URLs (one per line). &#10;Example:&#10;https://gemini.google.com/share/...&#10;https://chatgpt.com/share/..."></textarea>
                 <button id="btn-archive" class="btn-primary">Archive</button>
             </div>
 

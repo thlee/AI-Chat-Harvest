@@ -217,7 +217,7 @@
                         noChangeCount++;
                         // Wait for 20 checks * 200ms = 4 seconds of no change before finishing
                         // This handles slow valid lazy loads better
-                        if (noChangeCount >= 20) {
+                        if (noChangeCount >= 5) {
                             clearInterval(scrollTimer);
                             console.log("Gemini Archiver: Reached bottom of page (Stable).");
                             resolve();
@@ -239,7 +239,7 @@
             });
 
             // Final hydration wait
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             // Title Extraction
             let title = 'Gemini Conversation';
