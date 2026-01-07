@@ -63,37 +63,36 @@
 
     // Scrape Claude conversation
     async function scrapeClaude() {
-        console.log("Claude Archiver: Scraping conversation (v4.5 - CSS Class Targeting)...");
+        console.log("Claude Archiver: Scraping conversation (v4.6 - Robust Selectors & Skip Fix)...");
 
         // Ensure all messages are loaded
         await autoScroll();
 
-        // Strategy: Precise DOM extraction using confirmed CSS classes
-        // .font-user-message and .font-claude-response are the definitive selectors found in the HTML source.
-
         // Wait for content (messages)
         try {
-            // Updated selector to use data-testid which is more reliable
             await waitForElement('[data-testid="user-message"], .font-claude-response', 5000);
         } catch (e) {
-            console.warn("Claude: Timeout waiting for messages (CSS Class check)");
+            console.warn("Claude: Timeout waiting for messages");
         }
 
         let turns = [];
         // Scope to the main chat area to avoid sidebars
         const chatRoot = document.querySelector('div[role="main"]') || document.body;
 
-        // Claude Selectors
-        const userSelector = '.font-user-message';
-        // Claude model messages key selector
-        const modelSelector = '.font-claude-response';
+        // Claude Selectors - Robust Set (Backup for flaky class names)
+        const userSelectors = ['[data-testid="user-message"]', '.font-user-message', '.user-message'];
+        const modelSelectors = ['.font-claude-response', '[data-testid="content-block"]', '.claude-response'];
 
         // Gather all relevant nodes
         let userNodes = [];
-        chatRoot.querySelectorAll(userSelector).forEach(el => userNodes.push(el));
+        userSelectors.forEach(sel => {
+            chatRoot.querySelectorAll(sel).forEach(el => userNodes.push(el));
+        });
 
         let modelNodes = [];
-        chatRoot.querySelectorAll(modelSelector).forEach(el => modelNodes.push(el));
+        modelSelectors.forEach(sel => {
+            chatRoot.querySelectorAll(sel).forEach(el => modelNodes.push(el));
+        });
 
         // Deduplicate
         userNodes = [...new Set(userNodes)];
@@ -112,19 +111,27 @@
             return (a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
         });
 
-        // Turns collection
-
-
         allNodes.forEach(({ role, node }) => {
             // CRITICAL FIX: Skip "Thinking Process" blocks completely
             // These are identified by being inside a container with tabindex="-1"
-            // Skipping this prevents double messages and capturing internal logs
-            if (node.closest('[tabindex="-1"]')) {
+            // Apply this MAINLY to model messages. User messages should NEVER be hidden by this.
+            if (role === 'model' && node.closest('[tabindex="-1"]')) {
                 return;
             }
 
             // Clone node to safely modify it
             const clone = node.cloneNode(true);
+
+            // FALLBACK: If skip failed, try to check internal content for Thinking Process 
+            // Method A: Remove by specific class 'font-ui' (Thinking Process container)
+            const fontUiContainers = clone.querySelectorAll('.font-ui');
+            fontUiContainers.forEach(el => {
+                if (el.tagName === 'DIV') el.remove();
+            });
+
+            // Method B: Remove specific thought component markers
+            const thoughtMarkers = clone.querySelectorAll('[data-testid="process-message-component"], .font-claude-thought-text');
+            thoughtMarkers.forEach(el => el.remove());
 
             // 1. Remove UI Artifacts (Copy buttons, etc)
             const artifacts = clone.querySelectorAll('button, .contents-copy, .text-xs.select-none, .sticky.top-0, .sticky.top-2, .sticky.top-9');
