@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Gemini Archiver Settings</title>
+    <style>
+        html {
+            box-sizing: border-box;
+            overflow-y: scroll;
+            /* Always show scrollbar to prevent flickering */
+        }
+
+        *,
+        *:before,
+        *:after {
+            box-sizing: inherit;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            padding: 0;
+            margin: 0;
+            min-width: 400px;
+            min-height: 480px;
+            /* Increased min-height */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            padding: 2rem;
+        }
+
+        h1 {
+            border-bottom: 1px solid #334155;
+            padding-bottom: 1rem;
+            margin-top: 0;
+            font-size: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid #334155;
+            background-color: #1e293b;
+            color: #fff;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        input[type="text"]:focus {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+        }
+
+        input[type="number"] {
+            width: 100px;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid #334155;
+            background-color: #1e293b;
+            color: #fff;
+            outline: none;
+        }
+
+        input[type="number"]:focus {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+        }
+
+        .help-text {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-top: 0.5rem;
+        }
+
+        button {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        #status {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #4ade80;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Settings</h1>
+
+        <div class="form-group">
+            <label for="save-dir">Download Subdirectory</label>
+            <input type="text" id="save-dir" placeholder="e.g. GeminiArchives">
+            <p class="help-text">
+                Files will be saved in <b>Downloads folder</b> within this directory.<br>
+                <i>Note: Chrome restricts extensions to the Downloads folder for security.</i>
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label for="history-count">Archive History Count</label>
+            <input type="number" id="history-count" min="1" max="50" value="5">
+            <p class="help-text">
+                Number of recent archives to display in the popup (1-50). Default: 5
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="show-source" checked>
+                Show Source Page
+            </label>
+            <p class="help-text">
+                When unchecked, the download process runs in the background and the original Gemini tab closes
+                automatically.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="auto-open" checked>
+                Auto-open File After Download
+            </label>
+            <p class="help-text">
+                When checked, the Downloads folder opens automatically to show the saved file location.
+            </p>
+        </div>
+
+        <button id="save">Save Settings</button>
+        <div id="status">Settings saved.</div>
+    </div>
+
+    <script src="options.js"></script>
+</body>
+
+</html>
