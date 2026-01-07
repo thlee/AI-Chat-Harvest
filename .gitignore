@@ -3,5 +3,4 @@ node_modules/
 *.log
 test_output.html
 *.tmp
-Claude Chat Save/
-Gemini Chst Save/
+saved files/

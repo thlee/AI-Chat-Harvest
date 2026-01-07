@@ -9,74 +9,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ status: "started" });
     }
 
-    // Execute script in MAIN world to extract Claude data (bypass CSP)
-    if (request.action === "EXECUTE_CLAUDE_EXTRACTION") {
-        // Must have a sender tab
-        if (!sender.tab) {
-            sendResponse({ success: false, error: "No sender tab" });
-            return;
-        }
 
-        const tabId = sender.tab.id;
-
-        chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            world: 'MAIN',
-            func: () => {
-                try {
-                    // Recursive Pattern Matching Search
-                    // We look for an array of message objects { sender: '...', text: '...' }
-                    function findConversationData(obj, depth = 0) {
-                        if (!obj || typeof obj !== 'object' || depth > 8) return null; // Limit depth
-
-                        // Check if this object IS the conversation container
-                        if (obj.messages && Array.isArray(obj.messages) && obj.messages.length > 0) {
-                            const msg = obj.messages[0];
-                            if ((msg.sender || msg.role) && (msg.text || msg.content)) return obj.messages;
-                        }
-
-                        // Check if this object IS the messages array
-                        if (Array.isArray(obj) && obj.length > 0) {
-                            const msg = obj[0];
-                            if ((msg.sender || msg.role) && (msg.text || msg.content)) return obj;
-                        }
-
-                        // Deep search
-                        for (let key of Object.keys(obj)) {
-                            // Optimization: skip large internal objects or obviously wrong keys
-                            if (key.startsWith('_') || key === 'children' || key === 'components') continue;
-
-                            const result = findConversationData(obj[key], depth + 1);
-                            if (result) return result;
-                        }
-                        return null;
-                    }
-
-                    if (window.__remixContext && window.__remixContext.state && window.__remixContext.state.loaderData) {
-                        const found = findConversationData(window.__remixContext.state.loaderData);
-                        if (found) {
-                            // Normalize structure
-                            if (Array.isArray(found)) return { messages: found };
-                            return found;
-                        }
-                    }
-                    return null;
-                } catch (e) {
-                    return null;
-                }
-            }
-        })
-            .then(results => {
-                const data = results && results[0] ? results[0].result : null;
-                sendResponse({ success: true, payload: data });
-            })
-            .catch(err => {
-                console.error("Main world script execution failed:", err);
-                sendResponse({ success: false, error: err.toString() });
-            });
-
-        return true;
-    }
 
     return true; // Keep channel open for async response
 });
@@ -273,10 +206,10 @@ function generateHtml(data) {
             // Sanitize filename - cleaner approach
             let safeTitle = (data.title || "gemini_archive");
             // Remove newlines and tabs
-            safeTitle = safeTitle.replace(/[\r\n\t]/g, ' ');
+            safeTitle = safeTitle.replace(/[\\r\\n\\t]/g, ' ');
             // Remove punctuation and illegal characters for cleaner filenames (User Request)
             // Replaces: . , ! ? ; : " ' ( ) [ ] { } < > | * / \
-            safeTitle = safeTitle.replace(/[.,!?;:"'(){}\[\]<>|*\/\\~]/g, ' ');
+            safeTitle = safeTitle.replace(/[.,!?;:"'(){}\\[\\]<>|*\\/\\\\~]/g, ' ');
             
             // Collapse multiple spaces
             safeTitle = safeTitle.replace(/\s+/g, ' ').trim();
@@ -316,7 +249,7 @@ function handleScrapeResponse(response) {
 
         // Replace multiple spaces with single space
 
-        // Replace multiple spaces with single space
+
         safeTitle = safeTitle.replace(/\s+/g, ' ');
 
         // Trim and truncate
