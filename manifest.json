@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Chat Harvest",
-  "version": "1.1",
+  "version": "1.0",
   "description": "Archive and download AI chat conversations from Gemini, ChatGPT, and more.",
   "icons": {
     "16": "assets/icon16.png",
