@@ -4,3 +4,9 @@ node_modules/
 test_output.html
 *.tmp
 saved files/
+*.zip
+assets/promo_maker.html
+assets/convert_icon.js
+assets/convert_icon_and_patch.js
+dist/
+dist_final/
