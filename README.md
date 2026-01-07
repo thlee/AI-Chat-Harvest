@@ -1,54 +1,92 @@
-# AI Chat Archiver - Chrome Extension
+# AI Chat Harvest - Chrome Extension
 
-Gemini와 ChatGPT 대화를 HTML/JSON 형식으로 아카이빙하는 크롬 확장 프로그램입니다.
+A powerful Chrome extension that archives conversations from Gemini, ChatGPT, and Claude in both HTML and JSON formats.
 
-## 🎯 주요 기능
+## 🎯 Key Features
 
-- ✅ **다중 플랫폼 지원**: Gemini, ChatGPT
-- ✅ **HTML/JSON 다운로드**: 대화 내용을 두 가지 형식으로 저장
-- ✅ **간편한 추출**: HTML 파일 내에 포함된 JSON 데이터를 쉽게 추출 가능
-- ✅ **한글 지원**: 유니코드 파일명 및 내용 완벽 지원
-- ✅ **설정 가능**: 소스 페이지 표시, 자동 파일 열기 등 사용자 옵션 제공
+- ✅ **Full Support for 3 Major AI Platforms**: Google Gemini, ChatGPT, and Claude AI.
+- ✅ **Two Archiving Modes**:
+    1. **Current Tab Archive**: Instantly save the conversation you are currently viewing.
+    2. **Batch Archive**: Automatically save multiple shared links (URLs) sequentially in one go.
+- ✅ **Dual HTML/JSON Output**: Saves a clean, readable HTML file along with a JSON dataset.
+- ✅ **Smart Title Extraction**: Automatically analyzes the first user query to generate a relevant filename.
+- ✅ **Customizable Settings**: Options for download paths, source page visibility, and auto-opening files.
 
-## 📦 설치 방법
+## � Privacy & Security
 
-1. Chrome에서 `chrome://extensions/` 열기
-2. 우측 상단 "개발자 모드" 활성화
-3. "압축해제된 확장 프로그램을 로드합니다" 버튼 클릭
-4. `gemini_archiver` 폴더 선택
+- **100% Local & Private**: All processing happens entirely within your browser. Your data is **never** sent to any external server.
+- **Direct Save**: Files are saved directly to your local machine's storage.
 
-## 🚀 사용 방법
+## �📦 Installation
 
-1. **대화 저장하기**:
-   - Gemini (`gemini.google.com`) 또는 ChatGPT (`chatgpt.com`) 대화 페이지로 이동
-   - 브라우저 우측 상단의 확장 프로그램 아이콘 클릭
-   - "Archive this page" 버튼 클릭
-   - HTML 파일이 자동으로 다운로드됩니다.
+1. Open `chrome://extensions/` in your Chrome browser.
+2. Toggle the **"Developer mode"** switch in the top right corner.
+3. Click the **"Load unpacked"** button.
+4. Select the `ai_chat_harvest` (or project) directory.
 
-2. **JSON 데이터 얻기**:
-   - **방법 1 (간편)**: 다운로드된 HTML 파일을 열고 상단의 "Download JSON" 버튼 클릭
-   - **방법 2 (개발자)**: HTML 소스 내 `<script id="conversation-data" type="application/json">` 태그 안에 원본 데이터가 들어있습니다.
+## 🚀 Usage
 
-## 📁 파일 구조
+### 1. Single Archive
+1. Navigate to a chat page (or shared page) on Gemini, ChatGPT, or Claude.
+2. Click the **AI Chat Harvest** icon in the browser toolbar.
+3. Keep the text input **empty** and click the **"Archive"** button.
+4. The current conversation will be scraped and downloaded.
+
+### 2. Batch Archive
+1. Click the **AI Chat Harvest** icon.
+2. Paste the **Shared URLs** of the conversations you want to archive into the text area (one per line).
+   - Example:
+     ```
+     https://gemini.google.com/share/...
+     https://chatgpt.com/share/...
+     https://claude.ai/share/...
+     ```
+3. Click the **"Archive"** button.
+4. The extension will automatically open a new tab, visit each URL, save the conversation, and then close the tab.
+
+### 3. Using Saved Data
+- **View HTML**: Open the downloaded HTML file in your browser to view the conversation in a clean layout.
+- **Extract JSON**:
+    - Click the **"Download JSON"** button at the top right of the HTML file to save the raw data separately.
+    - Alternatively, you can find the raw data inside the `<script id="conversation-data">` tag within the HTML source code.
+
+## ⚙️ Options
+
+Right-click the extension icon and select **"Options"** to configure the following:
+
+- **Download Subdirectory**: Specify a subdirectory name within your Downloads folder to save files (e.g., `AIArchives`).
+- **Archive History Count**: Set the number of recent archive logs to display in the popup (1-50).
+- **Show Source Page**: If unchecked, the AI page will run in the background and close automatically during batch operations. (Check this if you want to watch the process).
+- **Auto-open File After Download**: Automatically opens the saved file in the browser after the download completes.
+
+## 📁 File Structure
 
 ```
-gemini_archiver/
-├── background.js       # 백그라운드 서비스 워커 (HTML 생성 및 다운로드 처리)
-├── content.js          # 웹페이지 스크래핑 로직 (Gemini/ChatGPT DOM 파싱)
-├── popup.html/js       # 확장 프로그램 팝업 UI
-├── options.html/js     # 사용자 설정 페이지
-├── manifest.json       # 확장 프로그램 메타데이터 및 권한 설정
-├── style.css           # 공통 스타일시트
-├── icon.png            # 아이콘 파일
-└── README.md           # 프로젝트 문서
+ai_chat_harvest/
+├── background.js       # Background logic (Download management, Tab control)
+├── content.js          # Unified scraping engine (Gemini/ChatGPT/Claude detection & parsing)
+├── popup.html/js       # User Interface (URL input & Status display)
+├── options.html/js     # User Settings page
+├── manifest.json       # Extension configuration file
+├── style.css           # UI Styles
+└── README.md           # Documentation
 ```
 
-## 🔧 기술적 특징
+## 🤖 Acknowledgments
 
-- **안전한 HTML 생성**: Unicode Escaping을 통해 원본 HTML 태그와 스크립트가 깨지지 않고 안전하게 보존됩니다.
-- **순수 텍스트 JSON**: 복잡한 인코딩 없이 표준 JSON 방식을 사용하여 데이터 호환성이 뛰어납니다.
-- **독립 실행(Standalone)**: 생성된 HTML 파일은 별도의 CSS/JS 파일 없이 그 자체로 완벽하게 동작합니다.
+This project was developed with the assistance of **Google Gemini** and **Anthropic Claude**.
 
-## 📄 라이센스
+## ⚖️ License & Contact
 
-MIT License
+This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)**.
+
+**Summary of Rights:**
+- **Non-Commercial**: You may **not** use this software for commercial purposes (business use, paid services, etc.) without explicit permission.
+- **ShareAlike**: If you modify and distribute this software, you must distribute it under the same CC BY-NC-SA 4.0 license.
+- **Attribution**: You must give appropriate credit to the original author.
+
+**Contact:**
+- For bug reports, feature requests, or questions, please open an issue on the [GitHub Repository](https://github.com/thlee/AI-Chat-Harvest).
+
+**Disclaimer:**
+This software is provided "AS IS", without warranty of any kind. The author assumes no liability for any issues arising from its use. Users are responsible for compliance with the Terms of Service of the respective AI platforms.

@@ -49,6 +49,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (list) list.innerHTML = '<p style="font-size: 0.8rem; color: #f87171;">Reload required.</p>';
     }
 
+    // Help Modal Logic
+    const helpModal = document.getElementById('help-modal');
+    const btnHelp = document.getElementById('btn-help');
+    const closeHelp = document.getElementById('close-help');
+
+    btnHelp.addEventListener('click', () => {
+        helpModal.style.display = "block";
+    });
+
+    closeHelp.addEventListener('click', () => {
+        helpModal.style.display = "none";
+    });
+
+    window.addEventListener('click', (event) => {
+        if (event.target === helpModal) {
+            helpModal.style.display = "none";
+        }
+    });
+
     btnArchive.addEventListener('click', async () => {
         const inputVal = urlInput.value.trim();
         const urls = inputVal.split(/[\r\n]+/).map(u => u.trim()).filter(u => u.length > 0);
